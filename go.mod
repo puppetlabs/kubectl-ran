@@ -5,6 +5,8 @@ go 1.17
 require (
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
+	k8s.io/api v0.21.9
+	k8s.io/apimachinery v0.21.9
 	k8s.io/cli-runtime v0.21.9
 	k8s.io/client-go v0.21.9
 )
@@ -63,8 +65,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/api v0.21.9 // indirect
-	k8s.io/apimachinery v0.21.9 // indirect
 	k8s.io/klog/v2 v2.9.0 // indirect
 	k8s.io/utils v0.0.0-20210521133846-da695404a2bc // indirect
 	sigs.k8s.io/kustomize/api v0.8.8 // indirect
