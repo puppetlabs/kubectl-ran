@@ -8,6 +8,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -22,16 +23,18 @@ import (
 type Options struct {
 	ConfigFlags *genericclioptions.ConfigFlags
 	EnvVars     []string
+	Cpu, Memory string
 
 	image   string
 	command string
 	args    []string
 
 	genericclioptions.IOStreams
-	namespace string
-	config    *rest.Config
-	client    kubernetes.Interface
-	env       []corev1.EnvVar
+	namespace   string
+	config      *rest.Config
+	client      kubernetes.Interface
+	env         []corev1.EnvVar
+	cpu, memory resource.Quantity
 }
 
 func NewOptions(streams genericclioptions.IOStreams) *Options {
@@ -69,6 +72,20 @@ func (o *Options) Validate(args []string) error {
 		o.env = append(o.env, corev1.EnvVar{Name: tuple[0], Value: tuple[1]})
 	}
 
+	if o.Cpu != "" {
+		o.cpu, err = resource.ParseQuantity(o.Cpu)
+		if err != nil {
+			return fmt.Errorf("cpu: %w", err)
+		}
+	}
+
+	if o.Memory != "" {
+		o.memory, err = resource.ParseQuantity(o.Memory)
+		if err != nil {
+			return fmt.Errorf("memory: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -94,16 +111,28 @@ func (o *Options) Run() error {
 		},
 	}
 
+	if !o.cpu.IsZero() {
+		podSpec.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = o.cpu
+		podSpec.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU] = o.cpu
+	}
+
+	if !o.memory.IsZero() {
+		podSpec.Spec.Containers[0].Resources.Requests[corev1.ResourceMemory] = o.memory
+		podSpec.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory] = o.memory
+	}
+
 	pod, err := podInterface.Create(ctx, podSpec, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 
-	err = o.ExecInPod(ctx, podInterface, pod)
+	defer func() {
+		if err := podInterface.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0)); err != nil {
+			fmt.Println("failed to delete pod:", err)
+		}
+	}()
 
-	// Always delete before returning the error.
-	podInterface.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0))
-	return err
+	return o.ExecInPod(ctx, podInterface, pod)
 }
 
 func (o *Options) ExecInPod(ctx context.Context, podInterface typedv1.PodInterface, pod *corev1.Pod) error {
