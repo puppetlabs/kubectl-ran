@@ -28,6 +28,7 @@ type RanOptions struct {
 	genericclioptions.IOStreams
 	namespace string
 	config    *rest.Config
+	client    kubernetes.Interface
 	env       []corev1.EnvVar
 }
 
@@ -48,6 +49,16 @@ func (o *RanOptions) Validate(args []string) error {
 		return err
 	}
 
+	o.config, err = o.configFlags.ToRESTConfig()
+	if err != nil {
+		return err
+	}
+
+	o.client, err = kubernetes.NewForConfig(o.config)
+	if err != nil {
+		return err
+	}
+
 	for _, envVar := range o.envVars {
 		tuple := strings.Split(envVar, "=")
 		if len(tuple) != 2 {
@@ -62,17 +73,7 @@ func (o *RanOptions) Validate(args []string) error {
 func (o *RanOptions) Run() error {
 	ctx := context.TODO()
 
-	var err error
-	o.config, err = o.configFlags.ToRESTConfig()
-	if err != nil {
-		return err
-	}
-
-	clientset, err := kubernetes.NewForConfig(o.config)
-	if err != nil {
-		return err
-	}
-	podInterface := clientset.CoreV1().Pods(o.namespace)
+	podInterface := o.client.CoreV1().Pods(o.namespace)
 
 	podSpec := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -96,21 +97,21 @@ func (o *RanOptions) Run() error {
 		return err
 	}
 
-	err = o.ExecInPod(ctx, clientset, podInterface, pod)
+	err = o.ExecInPod(ctx, podInterface, pod)
 
 	// Always delete before returning the error.
 	podInterface.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0))
 	return err
 }
 
-func (o *RanOptions) ExecInPod(ctx context.Context, clientset *kubernetes.Clientset, podInterface typedv1.PodInterface, pod *corev1.Pod) error {
+func (o *RanOptions) ExecInPod(ctx context.Context, podInterface typedv1.PodInterface, pod *corev1.Pod) error {
 	if err := o.waitForPodStart(ctx, podInterface, pod.Name); err != nil {
 		return err
 	}
 
 	// TODO: copy volumes in
 
-	execRequest := clientset.CoreV1().RESTClient().Post().
+	execRequest := o.client.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
 		Namespace(o.namespace).

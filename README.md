@@ -15,3 +15,5 @@ It works by
 3. Runs the specified command.
 4. Copies the "mounted" volumes back out of the container.
 5. Deletes the pod.
+
+Requires the image contain `tail` and `tar`.
