@@ -1,4 +1,4 @@
-package main
+package ran
 
 import (
 	"context"
@@ -13,17 +13,19 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	typedv1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
-type RanOptions struct {
-	configFlags *genericclioptions.ConfigFlags
-	image       string
-	command     string
-	args        []string
-	envVars     []string
+type Options struct {
+	ConfigFlags *genericclioptions.ConfigFlags
+	EnvVars     []string
+
+	image   string
+	command string
+	args    []string
 
 	genericclioptions.IOStreams
 	namespace string
@@ -32,24 +34,24 @@ type RanOptions struct {
 	env       []corev1.EnvVar
 }
 
-func NewRanOptions(streams genericclioptions.IOStreams) *RanOptions {
-	return &RanOptions{
-		configFlags: genericclioptions.NewConfigFlags(true),
+func NewOptions(streams genericclioptions.IOStreams) *Options {
+	return &Options{
+		ConfigFlags: genericclioptions.NewConfigFlags(true),
 		IOStreams:   streams,
 	}
 }
 
-func (o *RanOptions) Validate(args []string) error {
+func (o *Options) Validate(args []string) error {
 	o.image = args[0]
 	o.command = args[1]
 	o.args = args[2:]
 
 	var err error
-	if o.namespace, _, err = o.configFlags.ToRawKubeConfigLoader().Namespace(); err != nil {
+	if o.namespace, _, err = o.ConfigFlags.ToRawKubeConfigLoader().Namespace(); err != nil {
 		return err
 	}
 
-	o.config, err = o.configFlags.ToRESTConfig()
+	o.config, err = o.ConfigFlags.ToRESTConfig()
 	if err != nil {
 		return err
 	}
@@ -59,7 +61,7 @@ func (o *RanOptions) Validate(args []string) error {
 		return err
 	}
 
-	for _, envVar := range o.envVars {
+	for _, envVar := range o.EnvVars {
 		tuple := strings.Split(envVar, "=")
 		if len(tuple) != 2 {
 			return fmt.Errorf("'%v' was not formatted as name=value", envVar)
@@ -70,7 +72,7 @@ func (o *RanOptions) Validate(args []string) error {
 	return nil
 }
 
-func (o *RanOptions) Run() error {
+func (o *Options) Run() error {
 	ctx := context.TODO()
 
 	podInterface := o.client.CoreV1().Pods(o.namespace)
@@ -104,7 +106,7 @@ func (o *RanOptions) Run() error {
 	return err
 }
 
-func (o *RanOptions) ExecInPod(ctx context.Context, podInterface typedv1.PodInterface, pod *corev1.Pod) error {
+func (o *Options) ExecInPod(ctx context.Context, podInterface typedv1.PodInterface, pod *corev1.Pod) error {
 	if err := o.waitForPodStart(ctx, podInterface, pod.Name); err != nil {
 		return err
 	}
@@ -135,7 +137,7 @@ func (o *RanOptions) ExecInPod(ctx context.Context, podInterface typedv1.PodInte
 
 var errPodTerminated = errors.New("pod terminated unexpectedly")
 
-func (o *RanOptions) waitForPodStart(ctx context.Context, podInterface typedv1.PodInterface, name string) error {
+func (o *Options) waitForPodStart(ctx context.Context, podInterface typedv1.PodInterface, name string) error {
 	watcher, err := podInterface.Watch(ctx, metav1.ListOptions{FieldSelector: "metadata.name=" + name})
 	if err != nil {
 		return err

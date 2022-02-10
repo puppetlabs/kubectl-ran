@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/puppetlabs/kubectl-ran/pkg/ran"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 var (
@@ -25,7 +26,7 @@ var (
 )
 
 func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
-	o := NewRanOptions(streams)
+	o := ran.NewOptions(streams)
 
 	cmd := &cobra.Command{
 		Use:          `ran IMAGE [--env="key=value"] [--volume=src:dst] -- [COMMAND] [args...]`,
@@ -44,8 +45,8 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringArrayVar(&o.envVars, "env", []string{}, "environment variables for the container")
-	o.configFlags.AddFlags(cmd.Flags())
+	cmd.Flags().StringArrayVar(&o.EnvVars, "env", []string{}, "environment variables for the container")
+	o.ConfigFlags.AddFlags(cmd.Flags())
 
 	return cmd
 }
