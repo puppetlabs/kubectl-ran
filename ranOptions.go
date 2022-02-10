@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ type RanOptions struct {
 	genericclioptions.IOStreams
 	namespace string
 	config    *rest.Config
+	env       []corev1.EnvVar
 }
 
 func NewRanOptions(streams genericclioptions.IOStreams) *RanOptions {
@@ -36,17 +38,25 @@ func NewRanOptions(streams genericclioptions.IOStreams) *RanOptions {
 	}
 }
 
-func (o *RanOptions) Validate(args []string) (err error) {
+func (o *RanOptions) Validate(args []string) error {
 	o.image = args[0]
 	o.command = args[1]
 	o.args = args[2:]
 
-	o.namespace, _, err = o.configFlags.ToRawKubeConfigLoader().Namespace()
-	if err != nil {
-		return
+	var err error
+	if o.namespace, _, err = o.configFlags.ToRawKubeConfigLoader().Namespace(); err != nil {
+		return err
 	}
 
-	return
+	for _, envVar := range o.envVars {
+		tuple := strings.Split(envVar, "=")
+		if len(tuple) != 2 {
+			return fmt.Errorf("'%v' was not formatted as name=value", envVar)
+		}
+		o.env = append(o.env, corev1.EnvVar{Name: tuple[0], Value: tuple[1]})
+	}
+
+	return nil
 }
 
 func (o *RanOptions) Run() error {
@@ -71,9 +81,11 @@ func (o *RanOptions) Run() error {
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:  "worker",
-					Image: o.image,
-					Args:  []string{"tail", "-f", "/dev/null"},
+					Name:    "worker",
+					Image:   o.image,
+					Command: []string{"tail"},
+					Args:    []string{"-f", "/dev/null"},
+					Env:     o.env,
 				},
 			},
 		},
@@ -96,6 +108,8 @@ func (o *RanOptions) ExecInPod(ctx context.Context, clientset *kubernetes.Client
 		return err
 	}
 
+	// TODO: copy volumes in
+
 	execRequest := clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(pod.Name).
@@ -111,7 +125,11 @@ func (o *RanOptions) ExecInPod(ctx context.Context, clientset *kubernetes.Client
 	if err != nil {
 		return err
 	}
-	return executor.Stream(remotecommand.StreamOptions{Stdout: o.Out, Stderr: o.ErrOut})
+	err = executor.Stream(remotecommand.StreamOptions{Stdout: o.Out, Stderr: o.ErrOut})
+
+	// TODO: copy volumes out, deal with error handling; we want to preserve the exec error while also exposing any copy errors
+
+	return err
 }
 
 var errPodTerminated = errors.New("pod terminated unexpectedly")
