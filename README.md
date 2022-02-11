@@ -10,7 +10,7 @@ kubectl ran busybox -e VAR1=Hello -e VAR2=world -v ./stuff:/stuff -- sh -c 'cp /
 ```
 
 It works by
-1. Starting a container with `sleep` in a new pod. You can optionally specify environment variables.
+1. Starting a container with `tail -f /dev/null` in a new pod. You can optionally specify environment variables.
 2. Copies any "mounted" volumes into the container.
 3. Runs the specified command.
 4. Copies the "mounted" volumes back out of the container.
