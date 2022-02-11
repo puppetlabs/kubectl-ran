@@ -49,6 +49,7 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringArrayVarP(&o.Volumes, "volume", "v", []string{}, "volumes to sync")
 	cmd.Flags().StringVar(&o.Cpu, "cpu", "", "cpu requirements for the container")
 	cmd.Flags().StringVar(&o.Cpu, "memory", "", "memory requirements for the container")
+	cmd.Flags().StringVar(&o.WaitTimeout, "wait-timeout", "30s", "time to wait for the pod to be ready")
 	o.ConfigFlags.AddFlags(cmd.Flags())
 
 	return cmd

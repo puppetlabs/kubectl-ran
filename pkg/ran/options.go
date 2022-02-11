@@ -30,6 +30,7 @@ type Options struct {
 	EnvVars     []string
 	Volumes     []string
 	Cpu, Memory string
+	WaitTimeout string
 
 	image   string
 	command string
@@ -45,6 +46,7 @@ type Options struct {
 	env         []corev1.EnvVar
 	volumes     []volumeSpec
 	cpu, memory resource.Quantity
+	waitTimeout time.Duration
 }
 
 func NewOptions(streams genericclioptions.IOStreams) *Options {
@@ -110,6 +112,10 @@ func (o *Options) Validate(args []string) error {
 		if err != nil {
 			return fmt.Errorf("memory: %w", err)
 		}
+	}
+
+	if o.waitTimeout, err = time.ParseDuration(o.WaitTimeout); err != nil {
+		return fmt.Errorf("time %v is not a valid duration: %w", o.WaitTimeout, err)
 	}
 
 	return nil
@@ -219,7 +225,7 @@ func (o *Options) waitForPodStart(ctx context.Context, name string) error {
 			case watch.Error:
 				return fmt.Errorf("pod %v errored: %v", name, e.Object)
 			}
-		case <-time.After(30 * time.Second):
+		case <-time.After(o.waitTimeout):
 			return fmt.Errorf("timed out waiting for pod %v", name)
 		}
 	}
