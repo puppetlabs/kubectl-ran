@@ -20,4 +20,4 @@ Requires the image contain `tail` and `tar`.
 
 Limitations:
 - Volumes must be directories
-- Destination base name is currently ignored. Source will be copied into the dir name of the destination.
+- Source and destination basename for volumes must match. Source will be copied into the dirname of the destination.

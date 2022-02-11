@@ -170,12 +170,21 @@ func (o *Options) ExecInPod(ctx context.Context, pod *corev1.Pod) error {
 		}
 	}
 
-	err := o.executor.execute(pod.Name, o.namespace, append([]string{o.command}, o.args...),
+	execErr := o.executor.execute(pod.Name, o.namespace, append([]string{o.command}, o.args...),
 		remotecommand.StreamOptions{Stdout: o.Out, Stderr: o.ErrOut})
 
-	// TODO: copy volumes out, deal with error handling; we want to preserve the exec error while also exposing any copy errors
+	// preserve the exec error while also exposing any copy errors
+	for _, spec := range o.volumes {
+		if err := o.copyFromPod(ctx, spec.dst, spec.src, pod.Name); err != nil {
+			if execErr != nil {
+				fmt.Println("failed to copy from pod:", err)
+			} else {
+				execErr = err
+			}
+		}
+	}
 
-	return err
+	return execErr
 }
 
 var errPodTerminated = errors.New("pod terminated unexpectedly")
