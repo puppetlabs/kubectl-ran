@@ -1,4 +1,4 @@
-# kubectl-run
+# kubectl-ran
 
 A Kubernetes addon for running an ephemeral container with a "mounted" volume.
 
