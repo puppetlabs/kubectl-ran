@@ -45,8 +45,8 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringArrayVar(&o.EnvVars, "env", []string{}, "environment variables for the container")
-	cmd.Flags().StringArrayVar(&o.Volumes, "volume", []string{}, "volumes to sync")
+	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", []string{}, "environment variables for the container")
+	cmd.Flags().StringArrayVarP(&o.Volumes, "volume", "v", []string{}, "volumes to sync")
 	cmd.Flags().StringVar(&o.Cpu, "cpu", "", "cpu requirements for the container")
 	cmd.Flags().StringVar(&o.Cpu, "memory", "", "memory requirements for the container")
 	o.ConfigFlags.AddFlags(cmd.Flags())
