@@ -7,13 +7,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"k8s.io/client-go/tools/remotecommand"
 )
 
 func (o *Options) copyToPod(ctx context.Context, src, dst, pod string) error {
 	if _, err := os.Stat(src); err != nil {
-		return fmt.Errorf("%s doesn't exist in local filesystem", src)
+		fmt.Printf("skipping copy of %v to pod: %v\n", src, err)
+		return nil
+	}
+
+	cmdArr := []string{"tar", "-xmf", "-"}
+	if strings.HasPrefix(dst, "/") {
+		cmdArr = append(cmdArr, "-C", "/")
+		dst = dst[1:]
 	}
 
 	reader, writer := io.Pipe()
@@ -24,22 +32,18 @@ func (o *Options) copyToPod(ctx context.Context, src, dst, pod string) error {
 		}
 	}()
 
-	cmdArr := []string{"tar", "-xmf", "-"}
-
-	destDir := filepath.Dir(dst)
-	if len(destDir) > 0 {
-		cmdArr = append(cmdArr, "-C", destDir)
-	}
-
 	return o.executor.execute(pod, o.namespace, cmdArr,
 		remotecommand.StreamOptions{Stdin: reader, Stdout: o.Out, Stderr: o.ErrOut})
 }
 
 func (o *Options) copyFromPod(ctx context.Context, src, dst, pod string) error {
+	cmdArr := []string{"tar", "cf", "-"}
+	src = strings.TrimPrefix(src, "/")
+
 	reader, outStream := io.Pipe()
 	go func() {
 		defer outStream.Close()
-		if err := o.executor.execute(pod, o.namespace, []string{"tar", "cf", "-", src},
+		if err := o.executor.execute(pod, o.namespace, append(cmdArr, src),
 			remotecommand.StreamOptions{Stdout: outStream, Stderr: o.ErrOut}); err != nil {
 			fmt.Println("unable to tar pod files", src, err)
 		}
@@ -49,6 +53,8 @@ func (o *Options) copyFromPod(ctx context.Context, src, dst, pod string) error {
 }
 
 func makeTar(src, dst string, writer io.Writer) error {
+	src, dst = filepath.Clean(src), filepath.Clean(dst)
+	fmt.Println("copy from local", src, "to remote", dst)
 	tw := tar.NewWriter(writer)
 	defer tw.Close()
 
@@ -62,8 +68,9 @@ func makeTar(src, dst string, writer io.Writer) error {
 			return err
 		}
 
-		// TODO: rewrite for destination path
-		header.Name = filepath.ToSlash(file)
+		// rewrite for destination path
+		header.Name = dst + strings.TrimPrefix(file, src)
+		fmt.Println(file, "->", header.Name)
 
 		// write header
 		if err := tw.WriteHeader(header); err != nil {
@@ -92,7 +99,10 @@ func makeTar(src, dst string, writer io.Writer) error {
 }
 
 func untarAll(src, dst string, reader io.Reader) error {
+	src, dst = filepath.Clean(src), filepath.Clean(dst)
+	fmt.Println("copy from remote", src, "to local", dst)
 	tr := tar.NewReader(reader)
+
 	for {
 		header, err := tr.Next()
 		if err != nil {
@@ -106,31 +116,34 @@ func untarAll(src, dst string, reader io.Reader) error {
 			return fmt.Errorf("unexpected tar format, leading '/' was not removed for %v", header.Name)
 		}
 
-		// TODO: rewrite for destination path
+		// rewrite for destination path
+		file := dst + strings.TrimPrefix(header.Name, src)
+		fmt.Println(header.Name, "->", file)
+
 		if header.FileInfo().IsDir() {
-			if err := os.MkdirAll(header.Name, 0755); err != nil {
-				return fmt.Errorf("error untaring directory %v: %w", header.Name, err)
+			if err := os.MkdirAll(file, 0755); err != nil {
+				return fmt.Errorf("error untaring directory %v: %w", file, err)
 			}
 			continue
 		}
 
 		if header.FileInfo().Mode()&os.ModeSymlink != 0 {
-			fmt.Printf("skipping symlink: %q -> %q\n", header.Name, header.Linkname)
+			fmt.Printf("skipping symlink: %q -> %q\n", file, header.Linkname)
 			continue
 		}
 
-		outFile, err := os.Create(header.Name)
+		outFile, err := os.Create(file)
 		if err != nil {
-			return fmt.Errorf("unable to create local file %v: %w", header.Name, err)
+			return fmt.Errorf("unable to create local file %v: %w", file, err)
 		}
 		// Ensure closed in case of other errors.
 		defer outFile.Close()
 
 		if _, err := io.Copy(outFile, tr); err != nil {
-			return fmt.Errorf("error untaring file %v: %w", header.Name, err)
+			return fmt.Errorf("error untaring file %v: %w", file, err)
 		}
 		if err := outFile.Close(); err != nil {
-			return fmt.Errorf("error closing file %v: %w", header.Name, err)
+			return fmt.Errorf("error closing file %v: %w", file, err)
 		}
 	}
 

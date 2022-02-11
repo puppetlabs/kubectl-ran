@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -91,11 +90,6 @@ func (o *Options) Validate(args []string) error {
 		tuple := strings.Split(volume, ":")
 		if len(tuple) != 2 {
 			return fmt.Errorf("invalid volume spec '%v', must be src:dst", volume)
-		}
-		if finfo, err := os.Stat(tuple[0]); err != nil {
-			return fmt.Errorf("%s doesn't exist in local filesystem", tuple[0])
-		} else if !finfo.IsDir() {
-			return fmt.Errorf("volumes must be directories, %s is not", tuple[0])
 		}
 		o.volumes = append(o.volumes, volumeSpec{src: tuple[0], dst: tuple[1]})
 	}

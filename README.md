@@ -18,7 +18,3 @@ It works by
 5. Deletes the pod.
 
 Requires the image contain `tail` and `tar`.
-
-Limitations:
-- Volumes must be directories
-- Source and destination basename for volumes must match. Source will be copied into the dirname of the destination.
