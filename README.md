@@ -19,4 +19,5 @@ It works by
 Requires the image contain `tail` and `tar`.
 
 Limitations:
+- Volumes must be directories
 - Destination base name is currently ignored. Source will be copied into the dir name of the destination.
