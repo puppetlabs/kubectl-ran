@@ -7,6 +7,7 @@ Example:
 mkdir -p ./stuff
 echo "Test suite" > ./stuff/in.txt
 kubectl ran busybox -e VAR1=Hello -e VAR2=world -v ./stuff:/stuff -- sh -c 'cp /stuff/in.txt /stuff/out.txt && echo "$VAR1 $VAR2" >> /stuff/out.txt'
+cat ./stuff/out.txt
 ```
 
 It works by

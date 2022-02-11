@@ -10,17 +10,6 @@ env:
   go_version: 1.17
 
 jobs:
-  lint:
-    name: Lint with golangci-lint
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check out code
-      uses: actions/checkout@v2
-    - name: Lint
-      uses: actions-contrib/golangci-lint@v1
-      with:
-        args: run -v --deadline 3m
-        golangci_lint_version: 1.44.0
   test:
     name: Test Go Stable
     runs-on: ubuntu-latest
