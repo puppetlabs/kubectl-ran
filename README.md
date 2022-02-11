@@ -17,3 +17,6 @@ It works by
 5. Deletes the pod.
 
 Requires the image contain `tail` and `tar`.
+
+Limitations:
+- Destination base name is currently ignored. Source will be copied into the dir name of the destination.

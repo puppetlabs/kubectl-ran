@@ -20,9 +20,14 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
+type volumeSpec struct {
+	src, dst string
+}
+
 type Options struct {
 	ConfigFlags *genericclioptions.ConfigFlags
 	EnvVars     []string
+	Volumes     []string
 	Cpu, Memory string
 
 	image   string
@@ -30,10 +35,14 @@ type Options struct {
 	args    []string
 
 	genericclioptions.IOStreams
-	namespace   string
-	config      *rest.Config
-	client      kubernetes.Interface
+	namespace string
+	config    *rest.Config
+	client    kubernetes.Interface
+	podInt    typedv1.PodInterface
+	executor  executor
+
 	env         []corev1.EnvVar
+	volumes     []volumeSpec
 	cpu, memory resource.Quantity
 }
 
@@ -64,12 +73,23 @@ func (o *Options) Validate(args []string) error {
 		return err
 	}
 
+	o.podInt = o.client.CoreV1().Pods(o.namespace)
+	o.executor = newExecutor(o.config, o.client)
+
 	for _, envVar := range o.EnvVars {
 		tuple := strings.Split(envVar, "=")
 		if len(tuple) != 2 {
 			return fmt.Errorf("'%v' was not formatted as name=value", envVar)
 		}
 		o.env = append(o.env, corev1.EnvVar{Name: tuple[0], Value: tuple[1]})
+	}
+
+	for _, volume := range o.Volumes {
+		tuple := strings.Split(volume, ":")
+		if len(tuple) != 2 {
+			return fmt.Errorf("invalid volume spec '%v', must be src:dst", volume)
+		}
+		o.volumes = append(o.volumes, volumeSpec{src: tuple[0], dst: tuple[1]})
 	}
 
 	if o.Cpu != "" {
@@ -91,8 +111,6 @@ func (o *Options) Validate(args []string) error {
 
 func (o *Options) Run() error {
 	ctx := context.TODO()
-
-	podInterface := o.client.CoreV1().Pods(o.namespace)
 
 	podSpec := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -121,43 +139,33 @@ func (o *Options) Run() error {
 		podSpec.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory] = o.memory
 	}
 
-	pod, err := podInterface.Create(ctx, podSpec, metav1.CreateOptions{})
+	pod, err := o.podInt.Create(ctx, podSpec, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		if err := podInterface.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0)); err != nil {
+		if err := o.podInt.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0)); err != nil {
 			fmt.Println("failed to delete pod:", err)
 		}
 	}()
 
-	return o.ExecInPod(ctx, podInterface, pod)
+	return o.ExecInPod(ctx, pod)
 }
 
-func (o *Options) ExecInPod(ctx context.Context, podInterface typedv1.PodInterface, pod *corev1.Pod) error {
-	if err := o.waitForPodStart(ctx, podInterface, pod.Name); err != nil {
+func (o *Options) ExecInPod(ctx context.Context, pod *corev1.Pod) error {
+	if err := o.waitForPodStart(ctx, pod.Name); err != nil {
 		return err
 	}
 
-	// TODO: copy volumes in
+	for _, spec := range o.volumes {
+		if err := o.copyToPod(ctx, spec.src, spec.dst, pod.Name); err != nil {
+			return err
+		}
+	}
 
-	execRequest := o.client.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(pod.Name).
-		Namespace(o.namespace).
-		SubResource("exec").
-		Param("stdout", "true").
-		Param("stderr", "true").
-		Param("command", o.command)
-	for _, arg := range o.args {
-		execRequest = execRequest.Param("command", arg)
-	}
-	executor, err := remotecommand.NewSPDYExecutor(o.config, "POST", execRequest.URL())
-	if err != nil {
-		return err
-	}
-	err = executor.Stream(remotecommand.StreamOptions{Stdout: o.Out, Stderr: o.ErrOut})
+	err := o.executor.execute(pod.Name, o.namespace, append([]string{o.command}, o.args...),
+		remotecommand.StreamOptions{Stdout: o.Out, Stderr: o.ErrOut})
 
 	// TODO: copy volumes out, deal with error handling; we want to preserve the exec error while also exposing any copy errors
 
@@ -166,8 +174,8 @@ func (o *Options) ExecInPod(ctx context.Context, podInterface typedv1.PodInterfa
 
 var errPodTerminated = errors.New("pod terminated unexpectedly")
 
-func (o *Options) waitForPodStart(ctx context.Context, podInterface typedv1.PodInterface, name string) error {
-	watcher, err := podInterface.Watch(ctx, metav1.ListOptions{FieldSelector: "metadata.name=" + name})
+func (o *Options) waitForPodStart(ctx context.Context, name string) error {
+	watcher, err := o.podInt.Watch(ctx, metav1.ListOptions{FieldSelector: "metadata.name=" + name})
 	if err != nil {
 		return err
 	}
