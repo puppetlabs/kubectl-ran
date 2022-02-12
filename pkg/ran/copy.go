@@ -14,7 +14,7 @@ import (
 
 func (o *Options) copyToPod(ctx context.Context, src, dst, pod string) error {
 	if _, err := os.Stat(src); err != nil {
-		fmt.Printf("skipping copy of %v to pod: %v\n", src, err)
+		o.Info("skipping copy of %q to pod: %v", src, err)
 		return nil
 	}
 
@@ -27,8 +27,8 @@ func (o *Options) copyToPod(ctx context.Context, src, dst, pod string) error {
 	reader, writer := io.Pipe()
 	go func() {
 		defer writer.Close()
-		if err := makeTar(src, dst, writer); err != nil {
-			fmt.Println("unable to tar local files", src, err)
+		if err := o.makeTar(src, dst, writer); err != nil {
+			o.Warn("unable to tar local files %q: %v", src, err)
 		}
 	}()
 
@@ -45,22 +45,22 @@ func (o *Options) copyFromPod(ctx context.Context, src, dst, pod string) error {
 		defer outStream.Close()
 		if err := o.executor.execute(pod, o.namespace, append(cmdArr, src),
 			remotecommand.StreamOptions{Stdout: outStream, Stderr: o.ErrOut}); err != nil {
-			fmt.Println("unable to tar pod files", src, err)
+			o.Warn("unable to tar pod files %q: %v", src, err)
 		}
 	}()
 
-	return untarAll(src, dst, reader)
+	return o.untarAll(src, dst, reader)
 }
 
-func makeTar(src, dst string, writer io.Writer) error {
+func (o *Options) makeTar(src, dst string, writer io.Writer) error {
 	src, dst = filepath.Clean(src), filepath.Clean(dst)
-	fmt.Println("copy from local", src, "to remote", dst)
+	o.Info("copy from local %q to remote %v", src, dst)
 	tw := tar.NewWriter(writer)
 	defer tw.Close()
 
 	err := filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Println("unable to walk directory", file, err)
+			o.Warn("unable to walk directory %q: %v", file, err)
 		}
 
 		header, err := tar.FileInfoHeader(fi, file)
@@ -70,7 +70,7 @@ func makeTar(src, dst string, writer io.Writer) error {
 
 		// rewrite for destination path
 		header.Name = dst + strings.TrimPrefix(file, src)
-		fmt.Println(file, "->", header.Name)
+		o.Info("%q -> %q", file, header.Name)
 
 		// write header
 		if err := tw.WriteHeader(header); err != nil {
@@ -89,7 +89,7 @@ func makeTar(src, dst string, writer io.Writer) error {
 		return nil
 	})
 	if err != nil {
-		fmt.Println("failures while adding to tar:", err)
+		o.Warn("failures while adding to tar: %v", err)
 	}
 
 	if err := tw.Close(); err != nil {
@@ -98,9 +98,9 @@ func makeTar(src, dst string, writer io.Writer) error {
 	return nil
 }
 
-func untarAll(src, dst string, reader io.Reader) error {
+func (o *Options) untarAll(src, dst string, reader io.Reader) error {
 	src, dst = filepath.Clean(src), filepath.Clean(dst)
-	fmt.Println("copy from remote", src, "to local", dst)
+	o.Info("copy from remote %q to local %q", src, dst)
 	tr := tar.NewReader(reader)
 
 	for {
@@ -113,37 +113,37 @@ func untarAll(src, dst string, reader io.Reader) error {
 		}
 
 		if filepath.IsAbs(header.Name) {
-			return fmt.Errorf("unexpected tar format, leading '/' was not removed for %v", header.Name)
+			return fmt.Errorf("unexpected tar format, leading '/' was not removed for %q", header.Name)
 		}
 
 		// rewrite for destination path
 		file := dst + strings.TrimPrefix(header.Name, src)
-		fmt.Println(header.Name, "->", file)
+		o.Info("%q -> %q", header.Name, file)
 
 		if header.FileInfo().IsDir() {
 			if err := os.MkdirAll(file, 0755); err != nil {
-				return fmt.Errorf("error untaring directory %v: %w", file, err)
+				return fmt.Errorf("error untaring directory %q: %w", file, err)
 			}
 			continue
 		}
 
 		if header.FileInfo().Mode()&os.ModeSymlink != 0 {
-			fmt.Printf("skipping symlink: %q -> %q\n", file, header.Linkname)
+			o.Warn("skipping symlink: %q -> %q", file, header.Linkname)
 			continue
 		}
 
 		outFile, err := os.Create(file)
 		if err != nil {
-			return fmt.Errorf("unable to create local file %v: %w", file, err)
+			return fmt.Errorf("unable to create local file %q: %w", file, err)
 		}
 		// Ensure closed in case of other errors.
 		defer outFile.Close()
 
 		if _, err := io.Copy(outFile, tr); err != nil {
-			return fmt.Errorf("error untaring file %v: %w", file, err)
+			return fmt.Errorf("error untaring file %q: %w", file, err)
 		}
 		if err := outFile.Close(); err != nil {
-			return fmt.Errorf("error closing file %v: %w", file, err)
+			return fmt.Errorf("error closing file %q: %w", file, err)
 		}
 	}
 

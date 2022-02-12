@@ -30,6 +30,7 @@ type Options struct {
 	Volumes     []string
 	Cpu, Memory string
 	WaitTimeout string
+	Verbose     bool
 
 	image   string
 	command string
@@ -81,7 +82,7 @@ func (o *Options) Validate(args []string) error {
 	for _, envVar := range o.EnvVars {
 		tuple := strings.Split(envVar, "=")
 		if len(tuple) != 2 {
-			return fmt.Errorf("'%v' was not formatted as name=value", envVar)
+			return fmt.Errorf("%q was not formatted as name=value", envVar)
 		}
 		o.env = append(o.env, corev1.EnvVar{Name: tuple[0], Value: tuple[1]})
 	}
@@ -89,7 +90,7 @@ func (o *Options) Validate(args []string) error {
 	for _, volume := range o.Volumes {
 		tuple := strings.Split(volume, ":")
 		if len(tuple) != 2 {
-			return fmt.Errorf("invalid volume spec '%v', must be src:dst", volume)
+			return fmt.Errorf("invalid volume spec %q, must be src:dst", volume)
 		}
 		o.volumes = append(o.volumes, volumeSpec{src: tuple[0], dst: tuple[1]})
 	}
@@ -152,7 +153,7 @@ func (o *Options) Run() error {
 
 	defer func() {
 		if err := o.podInt.Delete(ctx, pod.Name, *metav1.NewDeleteOptions(0)); err != nil {
-			fmt.Println("failed to delete pod:", err)
+			o.Warn("failed to delete pod: %v", err)
 		}
 	}()
 
@@ -177,7 +178,7 @@ func (o *Options) ExecInPod(ctx context.Context, pod *corev1.Pod) error {
 	for _, spec := range o.volumes {
 		if err := o.copyFromPod(ctx, spec.dst, spec.src, pod.Name); err != nil {
 			if execErr != nil {
-				fmt.Println("failed to copy from pod:", err)
+				o.Warn("failed to copy from pod:", err)
 			} else {
 				execErr = err
 			}
@@ -201,7 +202,7 @@ func (o *Options) waitForPodStart(ctx context.Context, name string) error {
 		select {
 		case e, ok := <-ch:
 			if !ok {
-				return fmt.Errorf("channel error waiting for pod %v: %v", name, e)
+				return fmt.Errorf("channel error waiting for pod %q: %v", name, e)
 			}
 			switch e.Type {
 			case watch.Modified:
@@ -214,13 +215,29 @@ func (o *Options) waitForPodStart(ctx context.Context, name string) error {
 				case corev1.PodFailed:
 					return errPodTerminated
 				case corev1.PodUnknown:
-					fmt.Printf("unknown state for pod %v: %v\n", name, e.Object)
+					o.Warn("unknown state for pod %q: %v", name, e.Object)
 				}
 			case watch.Error:
-				return fmt.Errorf("pod %v errored: %v", name, e.Object)
+				return fmt.Errorf("pod %q errored: %v", name, e.Object)
 			}
 		case <-time.After(o.waitTimeout):
-			return fmt.Errorf("timed out waiting for pod %v", name)
+			return fmt.Errorf("timed out waiting for pod %q", name)
 		}
+	}
+}
+
+func (o *Options) Warn(msg string, args ...interface{}) {
+	if !strings.HasSuffix(msg, "\n") {
+		msg = msg + "\n"
+	}
+	fmt.Printf(msg, args...)
+}
+
+func (o *Options) Info(msg string, args ...interface{}) {
+	if o.Verbose {
+		if !strings.HasSuffix(msg, "\n") {
+			msg = msg + "\n"
+		}
+		fmt.Printf(msg, args...)
 	}
 }
