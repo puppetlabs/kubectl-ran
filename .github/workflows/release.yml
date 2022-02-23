@@ -24,10 +24,8 @@ jobs:
         LINKFLAGS="-w -s"
         CGO_ENABLED= GOOS=darwin GOARCH=amd64 go build -ldflags="$LINKFLAGS"
         tar czf kubectl-ran-${tag}-x86_64-apple-darwin.tgz kubectl-ran
-        cp kubectl-ran-${tag}-x86_64-apple-darwin.tgz kubectl-ran-x86_64-apple-darwin.tgz
         CGO_ENABLED= GOOS=linux GOARCH=amd64 go build -ldflags="$LINKFLAGS"
         tar czf kubectl-ran-${tag}-x86_64-unknown-linux.tgz kubectl-ran
-        cp kubectl-ran-${tag}-x86_64-unknown-linux.tgz kubectl-ran-x86_64-unknown-linux.tgz
     - name: Upload release assets
       uses: skx/github-action-publish-binaries@release-2.0
       env:
