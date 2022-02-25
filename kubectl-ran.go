@@ -29,12 +29,18 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 	o := ran.NewOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:          `ran IMAGE [--env="key=value"] [--volume=src:dst] -- [COMMAND] [args...]`,
+		Use:          `kubectl ran IMAGE [--env="key=value"] [--volume=src:dst] -- COMMAND [args...]`,
 		Short:        "Run a command in an ephemeral container with synced volume and environment.",
 		Example:      fmt.Sprintf(ranExample, "kubectl"),
 		SilenceUsage: true,
-		Args:         cobra.MinimumNArgs(2),
 		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return c.Help()
+			}
+			if err := cobra.MinimumNArgs(2)(c, args); err != nil {
+				return err
+			}
+
 			if err := o.Validate(args); err != nil {
 				return err
 			}
