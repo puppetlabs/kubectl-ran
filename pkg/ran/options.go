@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -230,7 +231,8 @@ func (o *Options) Warn(msg string, args ...interface{}) {
 	if !strings.HasSuffix(msg, "\n") {
 		msg = msg + "\n"
 	}
-	fmt.Printf(msg, args...)
+	c := color.New(color.FgHiYellow)
+	c.Printf(msg, args...)
 }
 
 func (o *Options) Info(msg string, args ...interface{}) {
@@ -238,6 +240,7 @@ func (o *Options) Info(msg string, args ...interface{}) {
 		if !strings.HasSuffix(msg, "\n") {
 			msg = msg + "\n"
 		}
-		fmt.Printf(msg, args...)
+		c := color.New(color.FgHiCyan)
+		c.Printf(msg, args...)
 	}
 }
