@@ -51,6 +51,7 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 		},
 	}
 
+	cmd.Flags().StringVarP(&o.PodFile, "pod-file", "f", "", "YAML file containing a pod definition; container named '"+ran.ContainerName+"' will be overwritten with specified image and used for command execution")
 	cmd.Flags().StringArrayVarP(&o.EnvVars, "env", "e", []string{}, "environment variables for the container")
 	cmd.Flags().StringArrayVarP(&o.Volumes, "volume", "v", []string{}, "volumes to sync")
 	cmd.Flags().StringVar(&o.Cpu, "cpu", "", "cpu requirements for the container")

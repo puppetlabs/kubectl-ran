@@ -18,3 +18,25 @@ It works by
 5. Deletes the pod.
 
 Requires the image contain `tail` and `tar`.
+
+You can provide a file with `--pod-file pod.yaml` to specify additional options for the pod or add a sidecar, as in
+```
+spec:
+  containers:
+  - name: selenium
+    image: selenium/standalone-chrome
+    ports:
+    - name: selenium
+      containerPort: 4444
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 4444
+    volumeMounts:
+    - mountPath: /dev/shm
+      name: dshm
+  volumes:
+  - name: dshm
+    emptyDir:
+    medium: Memory
+```
