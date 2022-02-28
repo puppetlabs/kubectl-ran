@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -11,15 +12,19 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	scheme "k8s.io/client-go/kubernetes/scheme"
 	typedv1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
+
+const ContainerName = "worker"
 
 type volumeSpec struct {
 	src, dst string
@@ -29,6 +34,7 @@ type Options struct {
 	ConfigFlags *genericclioptions.ConfigFlags
 	EnvVars     []string
 	Volumes     []string
+	PodFile     string
 	Cpu, Memory string
 	WaitTimeout string
 	Verbose     bool
@@ -44,6 +50,7 @@ type Options struct {
 	podInt    typedv1.PodInterface
 	executor  executor
 
+	pod         *corev1.Pod
 	env         []corev1.EnvVar
 	volumes     []volumeSpec
 	cpu, memory resource.Quantity
@@ -79,6 +86,20 @@ func (o *Options) Validate(args []string) error {
 
 	o.podInt = o.client.CoreV1().Pods(o.namespace)
 	o.executor = newExecutor(o.config, o.client)
+
+	o.pod = &corev1.Pod{}
+	if o.PodFile != "" {
+		data, err := os.ReadFile(o.PodFile)
+		if err != nil {
+			return fmt.Errorf("failed reading pod file: %w", err)
+		}
+
+		newPod, _, err := scheme.Codecs.UniversalDeserializer().Decode(data, &schema.GroupVersionKind{Version: "v1", Kind: "Pod"}, o.pod)
+		if err != nil {
+			return fmt.Errorf("pod file unmarshal: %w", err)
+		}
+		o.pod = newPod.(*corev1.Pod)
+	}
 
 	for _, envVar := range o.EnvVars {
 		tuple := strings.Split(envVar, "=")
@@ -120,34 +141,40 @@ func (o *Options) Validate(args []string) error {
 func (o *Options) Run() error {
 	ctx := context.TODO()
 
-	podSpec := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "kubectl-ran-",
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "worker",
-					Image:   o.image,
-					Command: []string{"tail"},
-					Args:    []string{"-f", "/dev/null"},
-					Env:     o.env,
-				},
-			},
-		},
+	if o.pod.ObjectMeta.Name == "" {
+		o.pod.ObjectMeta.GenerateName = "kubectl-ran-"
+	}
+	var container *corev1.Container
+	for i := range o.pod.Spec.Containers {
+		if o.pod.Spec.Containers[i].Name == ContainerName {
+			container = &o.pod.Spec.Containers[i]
+		}
+	}
+	if container == nil {
+		o.pod.Spec.Containers = append(o.pod.Spec.Containers, corev1.Container{Name: ContainerName})
+		container = &o.pod.Spec.Containers[len(o.pod.Spec.Containers)-1]
 	}
 
+	container.Image = o.image
+	if len(container.Command) == 0 {
+		container.Command = []string{"tail"}
+	}
+	if len(container.Args) == 0 {
+		container.Args = []string{"-f", "/dev/null"}
+	}
+	container.Env = append(container.Env, o.env...)
+
 	if !o.cpu.IsZero() {
-		podSpec.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU] = o.cpu
-		podSpec.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU] = o.cpu
+		container.Resources.Requests[corev1.ResourceCPU] = o.cpu
+		container.Resources.Limits[corev1.ResourceCPU] = o.cpu
 	}
 
 	if !o.memory.IsZero() {
-		podSpec.Spec.Containers[0].Resources.Requests[corev1.ResourceMemory] = o.memory
-		podSpec.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory] = o.memory
+		container.Resources.Requests[corev1.ResourceMemory] = o.memory
+		container.Resources.Limits[corev1.ResourceMemory] = o.memory
 	}
 
-	pod, err := o.podInt.Create(ctx, podSpec, metav1.CreateOptions{})
+	pod, err := o.podInt.Create(ctx, o.pod, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}

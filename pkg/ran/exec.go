@@ -23,7 +23,8 @@ func (e executor) execute(pod, namespace string, command []string, opts remoteco
 		Resource("pods").
 		Name(pod).
 		Namespace(namespace).
-		SubResource("exec")
+		SubResource("exec").
+		Param("container", ContainerName)
 
 	if opts.Stdin != nil {
 		req = req.Param("stdin", "true")
