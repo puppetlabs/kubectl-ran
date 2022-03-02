@@ -85,7 +85,7 @@ func (o *Options) Validate(args []string) error {
 	}
 
 	o.podInt = o.client.CoreV1().Pods(o.namespace)
-	o.executor = newExecutor(o.config, o.client)
+	o.executor = newExecutor(o.config, o.client.CoreV1().RESTClient())
 
 	o.pod = &corev1.Pod{}
 	if o.PodFile != "" {

@@ -1,7 +1,8 @@
 package ran
 
 import (
-	"k8s.io/client-go/kubernetes"
+	"net/url"
+
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -9,12 +10,14 @@ import (
 type executor struct {
 	config *rest.Config
 	client rest.Interface
+	impl   func(config *rest.Config, method string, url *url.URL) (remotecommand.Executor, error)
 }
 
-func newExecutor(config *rest.Config, client kubernetes.Interface) executor {
+func newExecutor(config *rest.Config, client rest.Interface) executor {
 	var e executor
 	e.config = config
-	e.client = client.CoreV1().RESTClient()
+	e.client = client
+	e.impl = remotecommand.NewSPDYExecutor
 	return e
 }
 
@@ -39,7 +42,7 @@ func (e executor) execute(pod, namespace string, command []string, opts remoteco
 		req = req.Param("command", cmd)
 	}
 
-	executor, err := remotecommand.NewSPDYExecutor(e.config, "POST", req.URL())
+	executor, err := e.impl(e.config, "POST", req.URL())
 	if err != nil {
 		return err
 	}
