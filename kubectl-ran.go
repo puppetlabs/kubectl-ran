@@ -23,6 +23,8 @@ var (
 	# Run a command with a synced directory
 	%[1]s ran busybox --volume=./stuff:/stuff -- sh -c 'echo "Hello world" > /stuff/out.txt'
 `
+
+	version = "dev"
 )
 
 func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
@@ -33,6 +35,7 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 		Short:        "Run a command in an ephemeral container with synced volume and environment.",
 		Example:      fmt.Sprintf(ranExample, "kubectl"),
 		SilenceUsage: true,
+		Version:      version,
 		RunE: func(c *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return c.Help()
