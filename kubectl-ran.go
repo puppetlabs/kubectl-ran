@@ -14,14 +14,14 @@ import (
 
 var (
 	ranExample = `
-	# Start busybox and run a command
-	%[1]s ran busybox -- echo "Hello world"
+  # Start busybox and run a command
+  %[1]s ran busybox -- echo "Hello world"
 
-	# Run a command with environment variables
-	%[1]s ran busybox --env=VAR1=Hello --env=VAR2=world -- sh -c 'echo "$VAR1 $VAR2"'
+  # Run a command with environment variables
+  %[1]s ran busybox --env=VAR1=Hello --env=VAR2=world -- sh -c 'echo "$VAR1 $VAR2"'
 
-	# Run a command with a synced directory
-	%[1]s ran busybox --volume=./stuff:/stuff -- sh -c 'echo "Hello world" > /stuff/out.txt'
+  # Run a command with a synced directory
+  %[1]s ran busybox --volume=./stuff:/stuff -- sh -c 'echo "Hello world" > /stuff/out.txt'
 `
 
 	version = "dev"
@@ -31,7 +31,7 @@ func NewCmdRan(streams genericclioptions.IOStreams) *cobra.Command {
 	o := ran.NewOptions(streams)
 
 	cmd := &cobra.Command{
-		Use:          `kubectl ran IMAGE [--env="key=value"] [--volume=src:dst] -- COMMAND [args...]`,
+		Use:          `kubectl-ran IMAGE [--env="key=value"] [--volume=src:dst] -- COMMAND [args...]`,
 		Short:        "Run a command in an ephemeral container with synced volume and environment.",
 		Example:      fmt.Sprintf(ranExample, "kubectl"),
 		SilenceUsage: true,
