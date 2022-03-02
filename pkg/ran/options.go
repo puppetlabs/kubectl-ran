@@ -234,10 +234,20 @@ func (o *Options) waitForPodStart(ctx context.Context, name string) error {
 			}
 			switch e.Type {
 			case watch.Modified:
-				switch e.Object.(*corev1.Pod).Status.Phase {
+				status := e.Object.(*corev1.Pod).Status
+				switch status.Phase {
 				case corev1.PodRunning:
-					// Success, we have a running pod.
-					return nil
+					for _, condition := range status.Conditions {
+						if condition.Type == corev1.PodReady {
+							if condition.Status == corev1.ConditionTrue {
+								// Success, we have a running pod.
+								o.Info("pod %q ready", name)
+								return nil
+							}
+							break
+						}
+					}
+					o.Info("pod %q running: %v", name, summarizeConditions(status.Conditions))
 				case corev1.PodSucceeded:
 					return errPodTerminated
 				case corev1.PodFailed:
@@ -252,6 +262,14 @@ func (o *Options) waitForPodStart(ctx context.Context, name string) error {
 			return fmt.Errorf("timed out waiting for pod %q", name)
 		}
 	}
+}
+
+func summarizeConditions(conditions []corev1.PodCondition) string {
+	var b strings.Builder
+	for _, condition := range conditions {
+		fmt.Fprintf(&b, "%s=%s ", condition.Type, condition.Status)
+	}
+	return b.String()[:b.Len()-1]
 }
 
 func (o *Options) Warn(msg string, args ...interface{}) {
