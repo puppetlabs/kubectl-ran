@@ -28,3 +28,11 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+brews:
+  - tap:
+      owner: puppetlabs
+      name: homebrew-puppet
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/puppetlabs/kubectl-ran
+    description: A Kubernetes addon for running an ephemeral container with a "mounted" volume.
+    license: "Apache 2.0"
